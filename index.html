@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Rupee Coast FIRE Calculator</title>
+    <!-- FIX: Using the correct Universal Module Definition (UMD) CDN for modern Chart.js versions -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; color: #1e293b; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        h1 { color: #1e3a8a; margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-size: 1.8rem; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+        .input-group { background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #334155; }
+        input[type="range"] { width: 100%; margin-bottom: 5px; cursor: pointer; }
+        .value-disp { font-weight: bold; color: #2563eb; float: right; }
+        .results { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .result-item { margin-bottom: 12px; font-size: 1.15rem; color: #334155; }
+        .result-item strong { color: #166534; font-size: 1.25rem; }
+        #resStatus { font-weight: 700; margin-top: 5px; font-size: 1.1rem; }
+        .chart-container { position: relative; margin-top: 35px; height: 380px; width: 100%; }
+        .highlight-post { border-left: 4px solid #f59e0b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔎 Comprehensive Coast FIRE App (Local Offline Version)</h1>
+    
+    <div class="grid">
+        <div class="input-group">
+            <label>Current Age: <span id="lblCurrentAge" class="value-disp">30</span></label>
+            <input type="range" id="currentAge" min="18" max="70" value="30" oninput="calculate()">
+        </div>
+        <div class="input-group">
+            <label>Retirement Age: <span id="lblRetirementAge" class="value-disp">60</span></label>
+            <input type="range" id="retirementAge" min="35" max="80" value="60" oninput="calculate()">
+        </div>
+        <div class="input-group">
+            <label>Current Savings (₹): <span id="lblSavings" class="value-disp">2,500,000</span></label>
+            <input type="range" id="savings" min="0" max="100000000" step="100000" value="2500000" oninput="calculate()">
+        </div>
+        <div class="input-group">
+            <label>Annual Expenses Today (₹): <span id="lblExpenses" class="value-disp">600,000</span></label>
+            <input type="range" id="expenses" min="100000" max="5000000" step="25000" value="600000" oninput="calculate()">
+        </div>
+        <div class="input-group">
+            <label>Pre-Retirement Return (%): <span id="lblReturns" class="value-disp">12</span></label>
+            <input type="range" id="returns" min="4" max="18" step="0.5" value="12" oninput="calculate()">
+        </div>
+        <div class="input-group">
+            <label>Inflation Rate (%): <span id="lblInflation" class="value-disp">6</span></label>
+            <input type="range" id="inflation" min="2" max="12" step="0.5" value="6" oninput="calculate()">
+        </div>
+        <div class="input-group highlight-post" style="grid-column: span 2; background: #fffbeb;">
+            <label style="color: #92400e;">Post-Retirement Return Rate (%): <span id="lblPostReturns" class="value-disp" style="color: #d97706;">6</span></label>
+            <input type="range" id="postReturns" min="2" max="15" step="0.5" value="6" oninput="calculate()">
+            <small style="color: #b45309; display:block; margin-top:4px;">Set this equal to the inflation rate to mimic your conservative 0% real return scenario.</small>
+        </div>
+    </div>
+
+    <div class="results">
+        <div class="result-item">Inflation-Adjusted Target Corpus Needed: <strong id="resTargetCorpus">₹0</strong></div>
+        <div class="result-item">Your Required Coast FIRE Target <strong>Today</strong>: <strong id="resCoastNumber">₹0</strong></div>
+        <div id="resStatus">Analyzing asset parameters...</div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="corpusChart"></canvas>
+    </div>
+</div>
+
+<script>
+let chartInstance = null;
+
+function formatRupee(num) {
+    if (num >= 10000000) {
+        return '₹' + (num / 10000000).toFixed(2) + ' Crore';
+    } else if (num >= 100000) {
+        return '₹' + (num / 100000).toFixed(2) + ' Lakh';
+    }
+    return '₹' + Math.round(num).toLocaleString('en-IN');
+}
+
+function calculate() {
+    const currentAge = parseInt(document.getElementById('currentAge').value);
+    const retirementAge = parseInt(document.getElementById('retirementAge').value);
+    const currentSavings = parseFloat(document.getElementById('savings').value);
+    const expensesToday = parseFloat(document.getElementById('expenses').value);
+    const preReturns = parseFloat(document.getElementById('returns').value) / 100;
+    const inflation = parseFloat(document.getElementById('inflation').value) / 100;
+    const postReturns = parseFloat(document.getElementById('postReturns').value) / 100;
+
+    document.getElementById('lblCurrentAge').innerText = currentAge;
+    document.getElementById('lblRetirementAge').innerText = retirementAge;
+    document.getElementById('lblSavings').innerText = currentSavings.toLocaleString('en-IN');
+    document.getElementById('lblExpenses').innerText = expensesToday.toLocaleString('en-IN');
+    document.getElementById('lblReturns').innerText = (preReturns * 100).toFixed(1);
+    document.getElementById('lblInflation').innerText = (inflation * 100).toFixed(1);
+    document.getElementById('lblPostReturns').innerText = (postReturns * 100).toFixed(1);
+
+    const yearsToRetire = retirementAge - currentAge;
+    const expensesAtRetirement = expensesToday * Math.pow(1 + inflation, yearsToRetire);
+
+    let realPostRate = (1 + postReturns) / (1 + inflation) - 1;
+    let targetCorpus = 0;
+    
+    if (Math.abs(realPostRate) < 0.001) {
+        targetCorpus = expensesAtRetirement * 30; 
+    } else {
+        targetCorpus = expensesAtRetirement * ((1 - Math.pow(1 + realPostRate, -30)) / realPostRate);
+    }
+
+    const coastNumber = targetCorpus / Math.pow(1 + preReturns, yearsToRetire);
+
+    document.getElementById('resTargetCorpus').innerText = formatRupee(targetCorpus);
+    document.getElementById('resCoastNumber').innerText = formatRupee(coastNumber);
+
+    const statusDiv = document.getElementById('resStatus');
+    if (currentSavings >= coastNumber) {
+        statusDiv.innerText = "🎉 Status: Coast FIRE Milestone Met! Your current assets can naturally compound to your target.";
+        statusDiv.style.color = "#15803d";
+    } else {
+        statusDiv.innerText = "📉 Status: Building Phase. You need an additional " + formatRupee(coastNumber - currentSavings) + " today to safely coast.";
+        statusDiv.style.color = "#b91c1c";
+    }
+
+    // --- Simulation Arrays ---
+    let labels = [];
+    let corpusData = [];
+    
+    let currentCorpus = currentSavings * Math.pow(1 + preReturns, yearsToRetire);
+    let runningExpenses = expensesAtRetirement;
+
+    for (let age = retirementAge; age <= 95; age++) {
+        labels.push("Age " + age);
+        corpusData.push(Math.round(Math.max(0, currentCorpus)));
+
+        currentCorpus = currentCorpus * (1 + postReturns);
+        currentCorpus -= runningExpenses;
+        runningExpenses = runningExpenses * (1 + inflation);
+    }
+
+    // --- Chart rendering block ---
+    const ctx = document.getElementById('corpusChart').getContext('2d');
+    if (chartInstance) { chartInstance.destroy(); }
+    
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Post-Retirement Wealth Over Time (₹)',
+                data: corpusData,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                fill: true,
+                borderWidth: 2.5,
+                tension: 0.15
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    ticks: {
+                        callback: function(value) { return '₹' + (value / 100000).toLocaleString('en-IN') + ' L'; }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Initial script execution
+calculate();
+</script>
+</body>
+</html>
